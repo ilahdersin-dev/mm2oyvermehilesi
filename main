@@ -1,0 +1,589 @@
+
+Zeth Oy Hilesi| Sonsuz Oy
+-- Yer: StarterPlayer > StarterPlayerScripts > LocalScript
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local SoundService = game:GetService("SoundService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- AYARLAR
+local CONFIG = {
+    Accent = Color3.fromRGB(255, 48, 67),
+    Background = Color3.fromRGB(9, 10, 14),
+    Surface = Color3.fromRGB(17, 19, 25),
+    Surface2 = Color3.fromRGB(24, 26, 34),
+    White = Color3.fromRGB(246, 247, 250),
+    Muted = Color3.fromRGB(140, 145, 160),
+    Green = Color3.fromRGB(76, 229, 157),
+
+    ClickSound = "rbxassetid://6895079853",
+    RespawnDelay = 0.35,
+}
+
+-- Önceki kopyayı temizle
+local old = playerGui:FindFirstChild("ZethRebirthUI")
+if old then
+    old:Destroy()
+end
+
+local alive = true
+local loopEnabled = false
+local loopToken = 0
+local savedPosition = nil
+local characterConnection
+local humanoidConnection
+
+local function tween(object, duration, properties, style)
+    local info = TweenInfo.new(
+        duration,
+        style or Enum.EasingStyle.Quart,
+        Enum.EasingDirection.Out
+    )
+    local t = TweenService:Create(object, info, properties)
+    t:Play()
+    return t
+end
+
+local function make(className, properties, parent)
+    local object = Instance.new(className)
+    for key, value in pairs(properties or {}) do
+        object[key] = value
+    end
+    object.Parent = parent
+    return object
+end
+
+local function round(object, radius)
+    make("UICorner", {
+        CornerRadius = UDim.new(0, radius)
+    }, object)
+end
+
+local function stroke(object, color, thickness, transparency)
+    return make("UIStroke", {
+        Color = color,
+        Thickness = thickness or 1,
+        Transparency = transparency or 0,
+    }, object)
+end
+
+local function label(parent, name, text, size, position, font, textSize, color)
+    return make("TextLabel", {
+        Name = name,
+        BackgroundTransparency = 1,
+        Size = size,
+        Position = position,
+        Text = text,
+        Font = font or Enum.Font.Gotham,
+        TextSize = textSize or 12,
+        TextColor3 = color or CONFIG.White,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        TextWrapped = true,
+    }, parent)
+end
+
+local function playClick()
+    local sound = make("Sound", {
+        Name = "ZethClick",
+        SoundId = CONFIG.ClickSound,
+        Volume = 0.35,
+    }, SoundService)
+
+    sound:Play()
+    task.delay(3, function()
+        if sound.Parent then
+            sound:Destroy()
+        end
+    end)
+end
+
+-- GUI
+local gui = make("ScreenGui", {
+    Name = "ZethRebirthUI",
+    ResetOnSpawn = false,
+    IgnoreGuiInset = true,
+    DisplayOrder = 100,
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+}, playerGui)
+
+-- Açılış mesajı
+local splash = label(
+    gui, "Intro",
+    "İlk Başta açılması Uzın sürebilir.",
+    UDim2.new(1, -30, 0, 32),
+    UDim2.new(0, 15, 1, -24),
+    Enum.Font.GothamMedium, 13, CONFIG.White
+)
+splash.AnchorPoint = Vector2.new(0, 1)
+splash.TextXAlignment = Enum.TextXAlignment.Center
+splash.TextTransparency = 1
+
+tween(splash, 0.2, {
+    TextTransparency = 0,
+    Position = UDim2.new(0, 15, 1, -30)
+})
+
+-- Ana panel
+local main = make("Frame", {
+    Name = "Main",
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.new(0.5, 0, 0.5, 22),
+    Size = UDim2.fromOffset(350, 276),
+    BackgroundColor3 = CONFIG.Background,
+    BorderSizePixel = 0,
+    Visible = false,
+}, gui)
+round(main, 16)
+stroke(main, Color3.fromRGB(64, 39, 47), 1.2)
+
+local scale = make("UIScale", {
+    Scale = 1,
+}, main)
+
+-- Üstteki ince kırmızı şerit
+local accent = make("Frame", {
+    Name = "Accent",
+    Size = UDim2.new(1, 0, 0, 3),
+    BackgroundColor3 = CONFIG.Accent,
+    BorderSizePixel = 0,
+}, main)
+round(accent, 3)
+
+-- Başlık
+local header = make("Frame", {
+    Name = "Header",
+    Position = UDim2.fromOffset(0, 3),
+    Size = UDim2.new(1, 0, 0, 70),
+    BackgroundColor3 = CONFIG.Surface,
+    BorderSizePixel = 0,
+}, main)
+round(header, 15)
+
+local headerFill = make("Frame", {
+    Position = UDim2.new(0, 0, 1, -12),
+    Size = UDim2.new(1, 0, 0, 12),
+    BackgroundColor3 = CONFIG.Surface,
+    BorderSizePixel = 0,
+}, header)
+
+local logo = make("Frame", {
+    Position = UDim2.fromOffset(15, 14),
+    Size = UDim2.fromOffset(42, 42),
+    BackgroundColor3 = CONFIG.Accent,
+    BorderSizePixel = 0,
+}, header)
+round(logo, 11)
+
+local logoText = label(
+    logo, "LogoText", "Z",
+    UDim2.fromScale(1, 1), UDim2.fromScale(0, 0),
+    Enum.Font.GothamBlack, 27, CONFIG.White
+)
+logoText.TextXAlignment = Enum.TextXAlignment.Center
+
+local title = label(
+    header, "Title", "ZETH REBIRTH",
+    UDim2.new(1, -125, 0, 25),
+    UDim2.fromOffset(68, 13),
+    Enum.Font.GothamBold, 17, CONFIG.White
+)
+
+local subtitle = label(
+    header, "Subtitle", "CHARACTER CONTROL SYSTEM",
+    UDim2.new(1, -125, 0, 17),
+    UDim2.fromOffset(69, 38),
+    Enum.Font.GothamMedium, 9, CONFIG.Muted
+)
+
+local close = make("TextButton", {
+    Name = "Close",
+    Position = UDim2.new(1, -43, 0, 20),
+    Size = UDim2.fromOffset(29, 29),
+    BackgroundColor3 = CONFIG.Surface2,
+    Text = "×",
+    TextColor3 = CONFIG.Accent,
+    Font = Enum.Font.GothamMedium,
+    TextSize = 23,
+    AutoButtonColor = false,
+}, header)
+round(close, 9)
+
+-- İçerik alanı
+local content = make("Frame", {
+    Name = "Content",
+    Position = UDim2.fromOffset(13, 84),
+    Size = UDim2.new(1, -26, 1, -96),
+    BackgroundTransparency = 1,
+}, main)
+
+local function makeCard(name, y)
+    local card = make("Frame", {
+        Name = name,
+        Position = UDim2.fromOffset(0, y),
+        Size = UDim2.new(1, 0, 0, 70),
+        BackgroundColor3 = CONFIG.Surface,
+        BorderSizePixel = 0,
+    }, content)
+    round(card, 11)
+    stroke(card, Color3.fromRGB(39, 42, 52), 1)
+    return card
+end
+
+-- Tek seferlik yeniden doğma
+local respawnCard = makeCard("RespawnCard", 0)
+
+local respawnIcon = make("Frame", {
+    Position = UDim2.fromOffset(11, 17),
+    Size = UDim2.fromOffset(35, 35),
+    BackgroundColor3 = Color3.fromRGB(55, 24, 32),
+    BorderSizePixel = 0,
+}, respawnCard)
+round(respawnIcon, 9)
+
+local respawnIconText = label(
+    respawnIcon, "Icon", "↻",
+    UDim2.fromScale(1, 1), UDim2.fromScale(0, 0),
+    Enum.Font.GothamBold, 25, CONFIG.Accent
+)
+respawnIconText.TextXAlignment = Enum.TextXAlignment.Center
+
+label(
+    respawnCard, "Title", "Yeniden Doğ",
+    UDim2.new(1, -155, 0, 23),
+    UDim2.fromOffset(55, 11),
+    Enum.Font.GothamBold, 13, CONFIG.White
+)
+
+label(
+    respawnCard, "Description", "Karakterini sıfırla",
+    UDim2.new(1, -155, 0, 19),
+    UDim2.fromOffset(55, 34),
+    Enum.Font.Gotham, 10, CONFIG.Muted
+)
+
+local respawnButton = make("TextButton", {
+    Name = "RespawnButton",
+    Position = UDim2.new(1, -105, 0.5, 0),
+    AnchorPoint = Vector2.new(0, 0.5),
+    Size = UDim2.fromOffset(95, 34),
+    BackgroundColor3 = CONFIG.Accent,
+    Text = "YENİDEN DOĞ",
+    TextColor3 = CONFIG.White,
+    Font = Enum.Font.GothamBold,
+    TextSize = 9,
+    AutoButtonColor = false,
+}, respawnCard)
+round(respawnButton, 8)
+
+-- Sürekli doğma
+local loopCard = makeCard("LoopCard", 80)
+
+local loopIcon = make("Frame", {
+    Position = UDim2.fromOffset(11, 17),
+    Size = UDim2.fromOffset(35, 35),
+    BackgroundColor3 = CONFIG.Surface2,
+    BorderSizePixel = 0,
+}, loopCard)
+round(loopIcon, 9)
+
+local loopIconText = label(
+    loopIcon, "Icon", "∞",
+    UDim2.fromScale(1, 1), UDim2.fromScale(0, 0),
+    Enum.Font.GothamBold, 23, CONFIG.Muted
+)
+loopIconText.TextXAlignment = Enum.TextXAlignment.Center
+
+label(
+    loopCard, "Title", "Sürekli Doğma",
+    UDim2.new(1, -130, 0, 23),
+    UDim2.fromOffset(55, 11),
+    Enum.Font.GothamBold, 13, CONFIG.White
+)
+
+label(
+    loopCard, "Description", "Otomatik ölüm döngüsü",
+    UDim2.new(1, -130, 0, 19),
+    UDim2.fromOffset(55, 34),
+    Enum.Font.Gotham, 10, CONFIG.Muted
+)
+
+local toggle = make("TextButton", {
+    Name = "ToggleButton",
+    Position = UDim2.new(1, -62, 0.5, 0),
+    AnchorPoint = Vector2.new(0, 0.5),
+    Size = UDim2.fromOffset(49, 27),
+    BackgroundColor3 = Color3.fromRGB(52, 54, 64),
+    Text = "",
+    AutoButtonColor = false,
+}, loopCard)
+round(toggle, 20)
+
+local knob = make("Frame", {
+    Name = "Knob",
+    Position = UDim2.fromOffset(3, 3),
+    Size = UDim2.fromOffset(21, 21),
+    BackgroundColor3 = CONFIG.White,
+    BorderSizePixel = 0,
+}, toggle)
+round(knob, 20)
+
+-- Alt durum alanı
+local statusDot = make("Frame", {
+    Position = UDim2.fromOffset(3, 168),
+    Size = UDim2.fromOffset(8, 8),
+    BackgroundColor3 = CONFIG.Muted,
+    BorderSizePixel = 0,
+}, content)
+round(statusDot, 8)
+
+local status = label(
+    content, "Status", "SÜREKLİ DOĞMA KAPALI",
+    UDim2.new(1, -22, 0, 20),
+    UDim2.fromOffset(17, 162),
+    Enum.Font.GothamBold, 10, CONFIG.Muted
+)
+
+label(
+    content, "Footer", "ZETH  /  REBIRTH CONTROL",
+    UDim2.new(1, 0, 0, 15),
+    UDim2.fromOffset(0, 187),
+    Enum.Font.GothamMedium, 8, Color3.fromRGB(76, 80, 94)
+).TextXAlignment = Enum.TextXAlignment.Center
+
+-- Tek dosyalı istemci tarafı karakter kontrolü.
+-- Sunucu tarafından reddedilirse gerçek yeniden doğma
+-- için sunucu Script'i gerekir.
+
+local function getCharacter()
+    local character = player.Character
+    if not character then return nil, nil end
+    return character, character:FindFirstChildOfClass("Humanoid")
+end
+
+local function killCurrentCharacter()
+    local character, humanoid = getCharacter()
+    if not character or not humanoid then return end
+    if humanoid.Health <= 0 then return end
+
+    humanoid.Health = 0
+end
+
+local function updateToggle()
+    local color = loopEnabled and CONFIG.Accent
+        or Color3.fromRGB(52, 54, 64)
+
+    local position = loopEnabled
+        and UDim2.new(1, -24, 0, 3)
+        or UDim2.fromOffset(3, 3)
+
+    tween(toggle, 0.16, {BackgroundColor3 = color})
+    tween(knob, 0.16, {Position = position})
+
+    status.Text = loopEnabled
+        and "SÜREKLİ DOĞMA AÇIK"
+        or "SÜREKLİ DOĞMA KAPALI"
+
+    status.TextColor3 = loopEnabled and CONFIG.Green or CONFIG.Muted
+    statusDot.BackgroundColor3 = loopEnabled and CONFIG.Green or CONFIG.Muted
+    loopIcon.BackgroundColor3 = loopEnabled
+        and Color3.fromRGB(25, 59, 45)
+        or CONFIG.Surface2
+    loopIconText.TextColor3 = loopEnabled and CONFIG.Green or CONFIG.Muted
+end
+
+local function onCharacterAdded(character)
+    task.spawn(function()
+        local humanoid = character:WaitForChild("Humanoid", 10)
+        if not humanoid then return end
+
+        if humanoidConnection then
+            humanoidConnection:Disconnect()
+            humanoidConnection = nil
+        end
+
+        if loopEnabled and savedPosition then
+            task.wait(0.1)
+            if player.Character == character then
+                pcall(function()
+                    character:PivotTo(savedPosition)
+                end)
+            end
+        end
+
+        if loopEnabled then
+            task.wait(CONFIG.RespawnDelay)
+            if loopEnabled and player.Character == character
+                and humanoid.Health > 0 then
+                humanoid.Health = 0
+            end
+        end
+    end)
+end
+
+characterConnection = player.CharacterAdded:Connect(onCharacterAdded)
+
+-- Yeniden doğ butonu
+respawnButton.Activated:Connect(function()
+    playClick()
+    tween(respawnButton, 0.08, {
+        BackgroundColor3 = Color3.fromRGB(175, 24, 40)
+    })
+    task.delay(0.1, function()
+        if respawnButton.Parent then
+            tween(respawnButton, 0.15, {
+                BackgroundColor3 = CONFIG.Accent
+            })
+        end
+    end)
+    killCurrentCharacter()
+end)
+
+-- Sürekli döngüyü aç / kapat
+toggle.Activated:Connect(function()
+    playClick()
+    loopEnabled = not loopEnabled
+    loopToken += 1
+
+    if loopEnabled then
+        local character = player.Character
+        if character then
+            savedPosition = character:GetPivot()
+        end
+
+        task.spawn(function()
+            local myToken = loopToken
+
+            -- Karakteri öldür; yeni karakter doğduğunda
+            -- onCharacterAdded aynı işlemi tekrarlar.
+            task.wait(0.1)
+            if loopEnabled and loopToken == myToken then
+                killCurrentCharacter()
+            end
+        end)
+    else
+        savedPosition = nil
+    end
+
+    updateToggle()
+end)
+
+-- Kapat / tekrar aç
+local reopen = make("TextButton", {
+    Name = "ReopenButton",
+    AnchorPoint = Vector2.new(0, 0.5),
+    Position = UDim2.new(0, 16, 0.5, 0),
+    Size = UDim2.fromOffset(52, 52),
+    BackgroundColor3 = CONFIG.Background,
+    Text = "Z",
+    TextColor3 = CONFIG.Accent,
+    Font = Enum.Font.GothamBlack,
+    TextSize = 26,
+    AutoButtonColor = false,
+    Visible = false,
+}, gui)
+round(reopen, 14)
+stroke(reopen, CONFIG.Accent, 1.2)
+
+close.Activated:Connect(function()
+    playClick()
+    main.Visible = false
+    reopen.Visible = true
+end)
+
+reopen.Activated:Connect(function()
+    playClick()
+    reopen.Visible = false
+    main.Visible = true
+    main.Size = UDim2.fromOffset(310, 245)
+    main.Position = UDim2.new(0.5, 0, 0.5, 15)
+
+    tween(main, 0.3, {
+        Size = UDim2.fromOffset(350, 276),
+        Position = UDim2.new(0.5, 0, 0.5, 0)
+    }, Enum.EasingStyle.Back)
+end)
+
+-- Sürükleme: fare ve dokunmatik ekran
+local dragging = false
+local dragStart
+local startPosition
+local dragInput
+
+header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPosition = main.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+header.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and input == dragInput then
+        local delta = input.Position - dragStart
+        main.Position = UDim2.new(
+            startPosition.X.Scale,
+            startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale,
+            startPosition.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- Küçük ekranlara uyum
+local function fitScreen()
+    local camera = workspace.CurrentCamera
+    if not camera then return end
+    local viewport = camera.ViewportSize
+
+    local factor = math.min(
+        1,
+        (viewport.X - 24) / 350,
+        (viewport.Y - 30) / 276
+    )
+    scale.Scale = math.max(0.65, factor)
+end
+
+fitScreen()
+
+if workspace.CurrentCamera then
+    workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(fitScreen)
+end
+
+-- İki saniyelik giriş mesajından sonra aç
+task.wait(1.8)
+tween(splash, 0.2, {TextTransparency = 1})
+task.wait(0.22)
+
+if splash.Parent then
+    splash:Destroy()
+end
+
+main.Visible = true
+main.Size = UDim2.fromOffset(290, 225)
+main.Position = UDim2.new(0.5, 0, 0.5, 24)
+
+tween(main, 0.38, {
+    Size = UDim2.fromOffset(350, 276),
+    Position = UDim2.new(0.5, 0, 0.5, 0)
+}, Enum.EasingStyle.Back)
+
+updateToggle()
