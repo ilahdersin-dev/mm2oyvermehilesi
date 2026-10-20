@@ -1,5 +1,5 @@
 
-Zeth Oy Hilesi| Sonsuz Oy
+-- Zeth | Oy Hilesi🗳️
 -- Yer: StarterPlayer > StarterPlayerScripts > LocalScript
 
 local Players = game:GetService("Players")
